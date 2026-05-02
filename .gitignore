@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# env files — never commit secrets
+.env
+.env*.local
+.env.production
+
+# build output
+dist/
+
+# test coverage
+coverage/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+
+# Claude
+.claude/
