@@ -13,7 +13,7 @@ export default function NotFound() {
       }}
     >
       <p style={{ fontSize: 64, lineHeight: 1 }}>404</p>
-      <p style={{ color: "#64748b" }}>This page doesn't exist.</p>
+      <p style={{ color: "#64748b" }}>This page does not exist.</p>
       <Link
         href="/"
         style={{

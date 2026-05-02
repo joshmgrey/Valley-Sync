@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { signOut } from "next-auth/react";
 
 interface Props {
@@ -11,7 +12,7 @@ export function UserNav({ name, image }: Props) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       {image && (
-        <img
+        <Image
           src={image}
           alt={name ?? "User"}
           width={32}
