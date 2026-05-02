@@ -8,11 +8,10 @@ import { prisma } from "@/lib/prisma";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
-// Always bind to 0.0.0.0 so Railway (and other platforms) can route traffic in.
-// HOSTNAME from the environment is the container ID, not a valid bind address.
-const hostname = "0.0.0.0";
 
-const app = next({ dev, hostname, port });
+// Next.js needs a resolvable hostname for internal requests — use localhost.
+// The TCP server binds to 0.0.0.0 so Railway's proxy can reach it.
+const app = next({ dev, hostname: "localhost", port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
@@ -25,7 +24,7 @@ app.prepare().then(() => {
 
   initSocketServer(httpServer, taskService);
 
-  httpServer.listen(port, hostname, () => {
+  httpServer.listen(port, "0.0.0.0", () => {
     console.log(`> Ready on port ${port} [${dev ? "dev" : "prod"}]`);
   });
 
