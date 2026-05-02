@@ -14,6 +14,7 @@ export interface Task {
 export interface Board {
   id: string;
   name: string;
+  userId?: string;
   tasks: Task[];
   createdAt: string;
   updatedAt: string;

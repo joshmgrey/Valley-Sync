@@ -1,5 +1,7 @@
 import type { Board, Task } from "@/types";
 
+const NAME_MAX = 100;
+
 export interface BoardRepository {
   findById(id: string): Promise<Board | null>;
   findAll(): Promise<Board[]>;
@@ -21,20 +23,28 @@ export class BoardService {
     return this.repo.findAll();
   }
 
-  async createBoard(name: string): Promise<Board> {
-    if (!name.trim()) throw new Error("Board name cannot be empty");
-    return this.repo.create({ name: name.trim() });
+  async createBoard(name: string, userId: string): Promise<Board> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Board name cannot be empty");
+    if (trimmed.length > NAME_MAX) throw new Error(`Board name cannot exceed ${NAME_MAX} characters`);
+    return this.repo.create({ name: trimmed, userId });
   }
 
-  async renameBoard(id: string, name: string): Promise<Board> {
-    if (!name.trim()) throw new Error("Board name cannot be empty");
-    const board = await this.repo.update(id, { name: name.trim() });
+  async renameBoard(id: string, name: string, userId: string): Promise<Board> {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error("Board name cannot be empty");
+    if (trimmed.length > NAME_MAX) throw new Error(`Board name cannot exceed ${NAME_MAX} characters`);
+    const board = await this.repo.findById(id);
     if (!board) throw new Error(`Board ${id} not found`);
-    return board;
+    if (board.userId && board.userId !== userId) throw new Error("Forbidden");
+    const updated = await this.repo.update(id, { name: trimmed });
+    return updated!;
   }
 
-  async deleteBoard(id: string): Promise<void> {
-    const deleted = await this.repo.delete(id);
-    if (!deleted) throw new Error(`Board ${id} not found`);
+  async deleteBoard(id: string, userId: string): Promise<void> {
+    const board = await this.repo.findById(id);
+    if (!board) throw new Error(`Board ${id} not found`);
+    if (board.userId && board.userId !== userId) throw new Error("Forbidden");
+    await this.repo.delete(id);
   }
 }

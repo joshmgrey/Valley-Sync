@@ -36,6 +36,7 @@ function toTask(p: {
 function toBoard(p: {
   id: string;
   name: string;
+  userId: string | null;
   tasks: Parameters<typeof toTask>[0][];
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +44,7 @@ function toBoard(p: {
   return {
     id: p.id,
     name: p.name,
+    userId: p.userId ?? undefined,
     tasks: p.tasks.map(toTask),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
@@ -69,7 +71,7 @@ export class PrismaBoardRepository implements BoardRepository {
 
   async create(data: Omit<Board, "id" | "tasks" | "createdAt" | "updatedAt">): Promise<Board> {
     const row = await this.db.board.create({
-      data: { name: data.name },
+      data: { name: data.name, userId: data.userId },
       include: withTasks,
     });
     return toBoard(row);

@@ -65,9 +65,19 @@ describe("TaskService", () => {
 
     it("throws when title is empty", async () => {
       const service = new TaskService(makeRepo());
-      await expect(service.createTask("board-1", "   ")).rejects.toThrow(
-        "Task title cannot be empty"
-      );
+      await expect(service.createTask("board-1", "   ")).rejects.toThrow("cannot be empty");
+    });
+
+    it("throws when title exceeds 200 characters", async () => {
+      const service = new TaskService(makeRepo());
+      await expect(service.createTask("board-1", "a".repeat(201))).rejects.toThrow("cannot exceed");
+    });
+
+    it("throws when description exceeds 1000 characters", async () => {
+      const service = new TaskService(makeRepo());
+      await expect(
+        service.createTask("board-1", "Title", { description: "a".repeat(1001) })
+      ).rejects.toThrow("cannot exceed");
     });
   });
 
@@ -76,15 +86,18 @@ describe("TaskService", () => {
       const updated = makeTask({ title: "Updated" });
       const repo = makeRepo({ update: jest.fn().mockResolvedValue(updated) });
       const service = new TaskService(repo);
-
-      const result = await service.updateTask("task-1", { title: "Updated" });
-      expect(result).toEqual(updated);
+      await expect(service.updateTask("task-1", { title: "Updated" })).resolves.toEqual(updated);
     });
 
     it("throws when task is not found", async () => {
       const repo = makeRepo({ update: jest.fn().mockResolvedValue(null) });
       const service = new TaskService(repo);
       await expect(service.updateTask("missing", { title: "x" })).rejects.toThrow("not found");
+    });
+
+    it("throws when updated title exceeds 200 characters", async () => {
+      const service = new TaskService(makeRepo());
+      await expect(service.updateTask("task-1", { title: "a".repeat(201) })).rejects.toThrow("cannot exceed");
     });
   });
 

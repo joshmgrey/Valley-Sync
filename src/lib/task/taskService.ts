@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
 import type { Task, TaskStatus, TaskUpdatedPayload } from "@/types";
 
+const TITLE_MAX = 200;
+const DESC_MAX = 1000;
+
 export interface TaskRepository {
   findById(id: string): Promise<Task | null>;
   findByBoard(boardId: string): Promise<Task[]>;
@@ -27,12 +30,17 @@ export class TaskService {
     title: string,
     options: { description?: string; assigneeId?: string; status?: TaskStatus } = {}
   ): Promise<Task> {
-    if (!title.trim()) throw new Error("Task title cannot be empty");
+    const trimmed = title.trim();
+    if (!trimmed) throw new Error("Task title cannot be empty");
+    if (trimmed.length > TITLE_MAX) throw new Error(`Task title cannot exceed ${TITLE_MAX} characters`);
+    if (options.description && options.description.length > DESC_MAX) {
+      throw new Error(`Task description cannot exceed ${DESC_MAX} characters`);
+    }
     const now = new Date().toISOString();
     const task: Task = {
       id: randomUUID(),
       boardId,
-      title: title.trim(),
+      title: trimmed,
       description: options.description,
       assigneeId: options.assigneeId,
       status: options.status ?? "todo",
@@ -43,6 +51,15 @@ export class TaskService {
   }
 
   async updateTask(id: string, changes: TaskUpdatedPayload["changes"]): Promise<Task> {
+    if (changes.title !== undefined) {
+      const trimmed = changes.title.trim();
+      if (!trimmed) throw new Error("Task title cannot be empty");
+      if (trimmed.length > TITLE_MAX) throw new Error(`Task title cannot exceed ${TITLE_MAX} characters`);
+      changes = { ...changes, title: trimmed };
+    }
+    if (changes.description && changes.description.length > DESC_MAX) {
+      throw new Error(`Task description cannot exceed ${DESC_MAX} characters`);
+    }
     const updated = await this.repo.update(id, {
       ...changes,
       updatedAt: new Date().toISOString(),
