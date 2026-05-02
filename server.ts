@@ -8,7 +8,9 @@ import { prisma } from "@/lib/prisma";
 
 const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
-const hostname = process.env.HOSTNAME ?? "localhost";
+// Always bind to 0.0.0.0 so Railway (and other platforms) can route traffic in.
+// HOSTNAME from the environment is the container ID, not a valid bind address.
+const hostname = "0.0.0.0";
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -24,7 +26,7 @@ app.prepare().then(() => {
   initSocketServer(httpServer, taskService);
 
   httpServer.listen(port, hostname, () => {
-    console.log(`> Ready on http://${hostname}:${port} [${dev ? "dev" : "prod"}]`);
+    console.log(`> Ready on port ${port} [${dev ? "dev" : "prod"}]`);
   });
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
