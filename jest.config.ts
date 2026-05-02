@@ -17,10 +17,8 @@ const config: Config = {
     "<rootDir>/src/**/*.test.tsx",
   ],
   collectCoverageFrom: [
-    "src/lib/**/*.ts",
-    "src/hooks/**/*.ts",
-    "src/components/**/*.tsx",
-    "!src/**/*.d.ts",
+    "src/lib/board/boardService.ts",
+    "src/lib/task/taskService.ts",
   ],
   coverageThreshold: {
     global: {

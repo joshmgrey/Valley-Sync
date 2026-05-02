@@ -25,6 +25,30 @@ function makeRepo(overrides: Partial<TaskRepository> = {}): TaskRepository {
 }
 
 describe("TaskService", () => {
+  describe("getTask", () => {
+    it("returns task when found", async () => {
+      const task = makeTask();
+      const repo = makeRepo({ findById: jest.fn().mockResolvedValue(task) });
+      const service = new TaskService(repo);
+      await expect(service.getTask("task-1")).resolves.toEqual(task);
+    });
+
+    it("throws when task is not found", async () => {
+      const repo = makeRepo({ findById: jest.fn().mockResolvedValue(null) });
+      const service = new TaskService(repo);
+      await expect(service.getTask("missing")).rejects.toThrow("not found");
+    });
+  });
+
+  describe("getTasksForBoard", () => {
+    it("returns all tasks for a board", async () => {
+      const tasks = [makeTask(), makeTask({ id: "task-2" })];
+      const repo = makeRepo({ findByBoard: jest.fn().mockResolvedValue(tasks) });
+      const service = new TaskService(repo);
+      await expect(service.getTasksForBoard("board-1")).resolves.toEqual(tasks);
+    });
+  });
+
   describe("createTask", () => {
     it("creates a task with the given title and defaults to 'todo' status", async () => {
       const task = makeTask();
