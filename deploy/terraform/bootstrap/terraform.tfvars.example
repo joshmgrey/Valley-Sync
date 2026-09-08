@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+aws_region  = "us-east-1"
+github_org  = "joshmgrey"
+github_repo = "valley-sync"
+
+# Only override these if "valley-sync-tfstate" is already taken globally.
+# If you change state_bucket_name / lock_table_name here, also change the
+# matching values in ../versions.tf (the backend block cannot read variables).
+# state_bucket_name = "valley-sync-tfstate"
+# lock_table_name   = "valley-sync-tflock"
