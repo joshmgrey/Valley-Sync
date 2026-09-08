@@ -90,6 +90,12 @@ variable "log_retention_days" {
   default     = 14
 }
 
+variable "wait_for_steady_state" {
+  description = "Block `terraform apply` until the ECS service is stable. Keep true for CI; pass false on the very first apply (no image in ECR yet)."
+  type        = bool
+  default     = true
+}
+
 # ---------------------------------------------------------------------------
 # Database (RDS PostgreSQL)
 # ---------------------------------------------------------------------------
