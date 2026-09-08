@@ -17,10 +17,11 @@ in SSM Parameter Store, and an ECR repo for the image.
 | `providers.tf` | AWS provider, default tags |
 | `variables.tf` | All inputs (see `terraform.tfvars.example`) |
 | `outputs.tf` | Values CI consumes (ECR URL, cluster/service, migrate task ARN) |
+| `locals.tf` | Derived values (the app FQDN / URL) |
 | `network.tf` | VPC, public + private subnets, IGW, routes (no NAT) |
 | `ecr.tf` | Image registry + lifecycle policy |
-| `secrets.tf` | Generated DB password, SSM parameters |
-| `rds.tf` | PostgreSQL instance, subnet group, security group |
+| `secrets.tf` | Generated DB password, SSM parameters (AUTH_*, app URL) |
+| `rds.tf` | PostgreSQL instance, subnet group, security group, DATABASE_URL param |
 | `iam.tf` | ECS task execution + task roles |
 | `alb.tf` | ALB, target group, HTTP→HTTPS + HTTPS listeners, security group |
 | `dns.tf` | ACM cert, Route53 validation + alias record |
