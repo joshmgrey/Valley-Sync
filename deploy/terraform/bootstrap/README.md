@@ -41,10 +41,9 @@ human AWS credentials — everything after runs through the CI role.
 2. If `state_bucket_name` / `lock_table_name` differ from the defaults, update the
    `backend "s3"` block in [`../versions.tf`](../versions.tf) to match.
 
-3. In the GitHub repo, add:
-   - **Variable** `AWS_ROLE_ARN` = `ci_role_arn` output
-   - **Variable** `AWS_REGION` = `region` output
-   - **Variable** `TF_STATE_BUCKET` = `state_bucket_name` output
+3. In the GitHub repo, set the Actions Variables and Secrets listed in
+   [`../README.md`](../README.md#3-github-repo-configuration) — `AWS_ROLE_ARN`
+   comes from the `ci_role_arn` output here, `AWS_REGION` from `region`.
 
 4. Continue with [`../README.md`](../README.md) for the first `terraform apply`
    of the application stack.
