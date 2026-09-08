@@ -64,7 +64,6 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
       TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
       TF_VAR_subdomain: ${{ vars.SUBDOMAIN }}
-      TF_VAR_auth_secret: ${{ secrets.AUTH_SECRET }}
       TF_VAR_auth_github_id: ${{ secrets.AUTH_GITHUB_ID }}
       TF_VAR_auth_github_secret: ${{ secrets.AUTH_GITHUB_SECRET }}
     steps:
@@ -145,7 +144,6 @@ jobs:
       TF_VAR_aws_region: ${{ vars.AWS_REGION }}
       TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
       TF_VAR_subdomain: ${{ vars.SUBDOMAIN }}
-      TF_VAR_auth_secret: ${{ secrets.AUTH_SECRET }}
       TF_VAR_auth_github_id: ${{ secrets.AUTH_GITHUB_ID }}
       TF_VAR_auth_github_secret: ${{ secrets.AUTH_GITHUB_SECRET }}
     steps:
@@ -198,13 +196,13 @@ jobs:
           docker push "${ECR_REPO}:${GITHUB_SHA}"
 
       # 3. Apply the full stack. Task definitions now point at the pushed image.
-      #    wait_for_steady_state=false so migrations can run before we block on
+      #    wait_for_steady_state defaults false, so apply returns once the
+      #    service is updated — migrations (step 4) run before step 5 blocks on
       #    the rollout.
       - name: Terraform apply
         run: |
           terraform apply -auto-approve -lock-timeout=120s \
-            -var="image_tag=${GITHUB_SHA}" \
-            -var="wait_for_steady_state=false"
+            -var="image_tag=${GITHUB_SHA}"
 
       # 4. Run migrations as a one-off task and require exit code 0. Only ever
       #    one migrate task per deploy; `prisma migrate deploy` also takes a

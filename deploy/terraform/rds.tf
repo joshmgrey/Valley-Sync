@@ -15,8 +15,9 @@ resource "aws_db_parameter_group" "main" {
   family = "postgres${var.db_engine_version}"
 
   parameter {
-    name  = "rds.force_ssl"
-    value = "1"
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "immediate" # rds.force_ssl is a dynamic parameter
   }
 }
 

@@ -91,9 +91,9 @@ variable "log_retention_days" {
 }
 
 variable "wait_for_steady_state" {
-  description = "Block `terraform apply` until the ECS service is stable. Keep true for CI; pass false on the very first apply (no image in ECR yet)."
+  description = "Block `terraform apply` until the ECS service is stable. Default false: CI runs migrations between apply and rollout, then blocks with `aws ecs wait services-stable`. Set true for a local apply if you want it to wait."
   type        = bool
-  default     = true
+  default     = false
 }
 
 # ---------------------------------------------------------------------------
@@ -143,14 +143,9 @@ variable "db_skip_final_snapshot" {
 }
 
 # ---------------------------------------------------------------------------
-# Application secrets (values live in terraform.tfvars, which is gitignored)
+# GitHub OAuth app (values live in terraform.tfvars, which is gitignored).
+# AUTH_SECRET is not here — it is generated in secrets.tf.
 # ---------------------------------------------------------------------------
-
-variable "auth_secret" {
-  description = "Auth.js AUTH_SECRET (openssl rand -base64 32)."
-  type        = string
-  sensitive   = true
-}
 
 variable "auth_github_id" {
   description = "GitHub OAuth app client ID for the production callback URL."
