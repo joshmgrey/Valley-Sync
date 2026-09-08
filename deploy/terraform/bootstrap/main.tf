@@ -96,7 +96,7 @@ data "aws_iam_policy_document" "ci_trust" {
 
 resource "aws_iam_role" "ci" {
   name                 = "valley-sync-github-actions"
-  assume_role_policy    = data.aws_iam_policy_document.ci_trust.json
+  assume_role_policy   = data.aws_iam_policy_document.ci_trust.json
   max_session_duration = 3600
 }
 

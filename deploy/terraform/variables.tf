@@ -130,6 +130,12 @@ variable "db_deletion_protection" {
   default     = true
 }
 
+variable "db_skip_final_snapshot" {
+  description = "Skip the final snapshot on destroy. Leave false for real environments; flip to true for throwaway test stacks."
+  type        = bool
+  default     = false
+}
+
 # ---------------------------------------------------------------------------
 # Application secrets (values live in terraform.tfvars, which is gitignored)
 # ---------------------------------------------------------------------------
