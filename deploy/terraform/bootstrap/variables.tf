@@ -16,8 +16,8 @@ variable "lock_table_name" {
   default     = "valley-sync-tflock"
 }
 
-variable "github_org" {
-  description = "GitHub org or user that owns the repo (the part before the slash)."
+variable "github_owner" {
+  description = "GitHub account that owns the repo — an org or a personal username (the part before the slash)."
   type        = string
 }
 

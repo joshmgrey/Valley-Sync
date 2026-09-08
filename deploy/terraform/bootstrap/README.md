@@ -18,7 +18,7 @@ It cannot use the S3 backend because it is what creates that backend.
 ```bash
 cd deploy/terraform/bootstrap
 cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars: github_org, github_repo, aws_region
+# edit terraform.tfvars: github_owner, github_repo, aws_region
 
 terraform init
 terraform plan

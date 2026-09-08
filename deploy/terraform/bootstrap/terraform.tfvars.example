@@ -1,8 +1,8 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
 
-aws_region  = "us-east-1"
-github_org  = "joshmgrey"
-github_repo = "valley-sync"
+aws_region   = "us-east-1"
+github_owner = "joshmgrey"
+github_repo  = "Valley-Sync" # exact case — the OIDC sub claim is case-sensitive
 
 # Only override these if "valley-sync-tfstate" is already taken globally.
 # If you change state_bucket_name / lock_table_name here, also change the
