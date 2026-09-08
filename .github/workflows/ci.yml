@@ -18,6 +18,33 @@ env:
   TERRAFORM_VERSION: "1.9.8"
 
 jobs:
+  # Decide whether a push actually changes the app image or infra. Docs/test-only
+  # pushes still run test/lint/terraform but skip the deploy.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      deployable: ${{ steps.filter.outputs.deployable }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            deployable:
+              - 'src/**'
+              - 'server.ts'
+              - 'prisma/**'
+              - 'prisma.config.ts'
+              - 'next.config.js'
+              - 'tsconfig*.json'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'deploy/terraform/**'
+              - '.github/workflows/ci.yml'
+
   test:
     name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
@@ -131,8 +158,8 @@ jobs:
 
   deploy:
     name: Deploy
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test, lint, terraform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.deployable == 'true'
+    needs: [changes, test, lint, terraform]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-main
