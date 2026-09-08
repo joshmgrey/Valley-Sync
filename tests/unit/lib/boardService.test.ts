@@ -92,6 +92,11 @@ describe("BoardService", () => {
       await expect(service.renameBoard("board-1", "   ", "user-1")).rejects.toThrow("cannot be empty");
     });
 
+    it("throws when name exceeds 100 characters", async () => {
+      const service = new BoardService(makeRepo());
+      await expect(service.renameBoard("board-1", "a".repeat(101), "user-1")).rejects.toThrow("cannot exceed");
+    });
+
     it("throws Forbidden when user does not own the board", async () => {
       const repo = makeRepo({ findById: jest.fn().mockResolvedValue(makeBoard({ userId: "other-user" })) });
       const service = new BoardService(repo);

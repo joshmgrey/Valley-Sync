@@ -95,9 +95,21 @@ describe("TaskService", () => {
       await expect(service.updateTask("missing", { title: "x" })).rejects.toThrow("not found");
     });
 
+    it("throws when updated title is blank", async () => {
+      const service = new TaskService(makeRepo());
+      await expect(service.updateTask("task-1", { title: "   " })).rejects.toThrow("cannot be empty");
+    });
+
     it("throws when updated title exceeds 200 characters", async () => {
       const service = new TaskService(makeRepo());
       await expect(service.updateTask("task-1", { title: "a".repeat(201) })).rejects.toThrow("cannot exceed");
+    });
+
+    it("throws when updated description exceeds 1000 characters", async () => {
+      const service = new TaskService(makeRepo());
+      await expect(
+        service.updateTask("task-1", { description: "a".repeat(1001) })
+      ).rejects.toThrow("cannot exceed");
     });
   });
 
