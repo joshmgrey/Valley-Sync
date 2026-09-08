@@ -115,10 +115,15 @@ deploy.
 ## Running Tests
 
 ```bash
-npm test
+npm test            # or: npm test -- --coverage
 ```
 
-Tests cover the service layer (`BoardService`, `TaskService`) using mock repositories — no database required.
+The suite unit-tests the framework-independent domain layer — `BoardService`
+and `TaskService` against mock repositories, plus the Socket.io event schemas
+(`src/lib/socket/eventSchemas.ts`). No database required. Coverage is enforced
+at 90% (branches/functions/lines/statements) **for those files only**; route
+handlers, React components, and the Prisma repositories are thin adapters and
+are not part of the coverage gate.
 
 ## Deployment
 

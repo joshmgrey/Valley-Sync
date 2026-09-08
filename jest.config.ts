@@ -16,16 +16,20 @@ const config: Config = {
     "<rootDir>/src/**/*.test.ts",
     "<rootDir>/src/**/*.test.tsx",
   ],
+  // Coverage is enforced on the framework-independent domain layer only: the
+  // services and the socket event schemas. Route handlers, React components,
+  // and the Prisma repositories are thin framework adapters — exercised through
+  // the services (via mock repositories) or left to integration testing.
   collectCoverageFrom: [
-    "src/lib/board/boardService.ts",
-    "src/lib/task/taskService.ts",
+    "src/lib/**/*Service.ts",
+    "src/lib/socket/eventSchemas.ts",
   ],
   coverageThreshold: {
     global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
+      branches: 90,
+      functions: 90,
+      lines: 90,
+      statements: 90,
     },
   },
 };
