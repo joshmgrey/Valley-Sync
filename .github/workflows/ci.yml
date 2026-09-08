@@ -6,39 +6,35 @@ on:
   pull_request:
     branches: [main]
 
+# OIDC federation to AWS — no stored access keys.
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_VERSION: "1.9.8"
+
 jobs:
   test:
     name: Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         node-version: [20.x, 22.x]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Type-check
-        run: npx tsc --noEmit
-
-      - name: Run tests with coverage
-        run: npm test -- --coverage --ci --forceExit
-
-      - name: Upload coverage report
-        if: matrix.node-version == '20.x'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm test -- --coverage --ci --forceExit
+      - if: matrix.node-version == '20.x'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -48,22 +44,208 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20.x
           cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
 
-      - name: Install dependencies
-        run: npm ci
+  terraform:
+    name: Terraform (fmt / validate / plan)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+      TF_VAR_subdomain: ${{ vars.SUBDOMAIN }}
+      TF_VAR_auth_github_id: ${{ secrets.AUTH_GITHUB_ID }}
+      TF_VAR_auth_github_secret: ${{ secrets.AUTH_GITHUB_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Generate Prisma client
-        run: npx prisma generate
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
 
-      - name: Lint
-        run: npm run lint
+      # fmt + validate need no AWS credentials, so they always run — including on
+      # fork PRs and before the repo Variables/Secrets have been configured.
+      - name: fmt
+        run: terraform fmt -check -recursive
+
+      - name: validate
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      # plan needs the S3 backend + AWS + the tfvars. Skip cleanly until the
+      # repo has AWS_ROLE_ARN set (fork PRs never will).
+      - name: Configure AWS credentials
+        if: vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: plan
+        if: vars.AWS_ROLE_ARN != ''
+        run: |
+          terraform init -reconfigure -lock-timeout=120s
+          # Plan against whatever image the service is actually running, so the
+          # diff isn't polluted by a spurious image_tag change back to the
+          # "bootstrap" default. Falls back to that default before the first deploy.
+          IMAGE_TAG=bootstrap
+          if aws ecs describe-services --cluster valley-sync --services valley-sync \
+               --query 'services[0].status' --output text 2>/dev/null | grep -q ACTIVE; then
+            TD=$(aws ecs describe-services --cluster valley-sync --services valley-sync \
+              --query 'services[0].deployments[?status==`PRIMARY`]|[0].taskDefinition' --output text)
+            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text)
+            IMAGE_TAG=${IMAGE##*:}
+          fi
+          echo "plan image_tag=$IMAGE_TAG"
+          terraform plan -lock-timeout=120s -no-color -var="image_tag=$IMAGE_TAG" -out=tfplan | tee plan.txt
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request' && vars.AWS_ROLE_ARN != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.readFileSync('deploy/terraform/plan.txt', 'utf8');
+            if (plan.length > 60000) plan = plan.slice(-60000);
+            const body = ['#### Terraform plan', '```', plan, '```'].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+            });
+            const mine = comments.find(c => c.user.type === 'Bot' && c.body.startsWith('#### Terraform plan'));
+            const args = { owner: context.repo.owner, repo: context.repo.repo, body };
+            if (mine) await github.rest.issues.updateComment({ ...args, comment_id: mine.id });
+            else await github.rest.issues.createComment({ ...args, issue_number: context.issue.number });
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, lint, terraform]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    env:
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+      TF_VAR_subdomain: ${{ vars.SUBDOMAIN }}
+      TF_VAR_auth_github_id: ${{ secrets.AUTH_GITHUB_ID }}
+      TF_VAR_auth_github_secret: ${{ secrets.AUTH_GITHUB_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: init
+        run: terraform init -lock-timeout=120s
+
+      # 1. Make sure the ECR repo exists so the image push below has a target
+      #    (no-op after the first deploy).
+      - name: Ensure ECR repository
+        run: terraform apply -auto-approve -lock-timeout=120s -target=aws_ecr_repository.app
+
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image repository
+        run: echo "ECR_REPO=$(terraform output -raw ecr_repository_url)" >> "$GITHUB_ENV"
+
+      # 2. Build and push the image, tagged with the commit SHA. The public URL
+      #    is baked in here (client bundle + edge middleware), so it must match
+      #    what Terraform writes to SSM.
+      #
+      #    Tags are immutable — if this SHA is already in ECR (a re-run after a
+      #    later step failed), reuse it instead of failing on `docker push`.
+      - name: Build and push image
+        working-directory: .
+        run: |
+          if aws ecr describe-images --repository-name valley-sync \
+               --image-ids imageTag="${GITHUB_SHA}" >/dev/null 2>&1; then
+            echo "${ECR_REPO}:${GITHUB_SHA} already present — reusing it."
+            exit 0
+          fi
+          APP_URL="https://${{ vars.SUBDOMAIN }}.${{ vars.DOMAIN_NAME }}"
+          docker build --platform linux/amd64 \
+            --build-arg NEXT_PUBLIC_APP_URL="$APP_URL" \
+            --build-arg DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+            -t "${ECR_REPO}:${GITHUB_SHA}" .
+          docker push "${ECR_REPO}:${GITHUB_SHA}"
+
+      # 3. Apply the full stack. Task definitions now point at the pushed image.
+      #    wait_for_steady_state defaults false, so apply returns once the
+      #    service is updated — migrations (step 4) run before step 5 blocks on
+      #    the rollout.
+      - name: Terraform apply
+        run: |
+          terraform apply -auto-approve -lock-timeout=120s \
+            -var="image_tag=${GITHUB_SHA}"
+
+      # 4. Run migrations as a one-off task and require exit code 0. Only ever
+      #    one migrate task per deploy; `prisma migrate deploy` also takes a
+      #    Postgres advisory lock.
+      - name: Run database migrations
+        run: |
+          CLUSTER="$(terraform output -raw ecs_cluster_name)"
+          TASK_DEF="$(terraform output -raw migrate_task_definition_arn)"
+          NET="$(terraform output -raw migrate_network_configuration)"
+          TASK_ARN="$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "$TASK_DEF" \
+            --launch-type FARGATE \
+            --network-configuration "$NET" \
+            --query 'tasks[0].taskArn' --output text)"
+          echo "migrate task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$TASK_ARN"
+          EXIT_CODE="$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --query 'tasks[0].containers[0].exitCode' --output text)"
+          echo "migrate exit code: $EXIT_CODE"
+          test "$EXIT_CODE" = "0"
+
+      # 5. Block on the service rollout. A circuit-breaker rollback also ends with
+      #    a PRIMARY / COMPLETED deployment, so COMPLETED alone isn't enough —
+      #    require that the PRIMARY deployment is actually running the task
+      #    definition this apply produced.
+      - name: Wait for service rollout
+        run: |
+          CLUSTER="$(terraform output -raw ecs_cluster_name)"
+          SERVICE="$(terraform output -raw ecs_service_name)"
+          EXPECTED="$(terraform output -raw app_task_definition_arn)"
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          PRIMARY="$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].deployments[?status==`PRIMARY`]|[0].{state:rolloutState,td:taskDefinition}' --output json)"
+          echo "$PRIMARY"
+          STATE="$(echo "$PRIMARY" | jq -r .state)"
+          RUNNING_TD="$(echo "$PRIMARY" | jq -r .td)"
+          if [ "$STATE" != "COMPLETED" ]; then
+            echo "::error::rollout state is $STATE"; exit 1
+          fi
+          if [ "$RUNNING_TD" != "$EXPECTED" ]; then
+            echo "::error::service rolled back — PRIMARY is $RUNNING_TD, expected $EXPECTED"; exit 1
+          fi
+
+      - name: Summary
+        run: echo "Deployed ${GITHUB_SHA} -> $(terraform output -raw app_url)" >> "$GITHUB_STEP_SUMMARY"

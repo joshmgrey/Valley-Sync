@@ -10,7 +10,7 @@ const dev = process.env.NODE_ENV !== "production";
 const port = parseInt(process.env.PORT ?? "3000", 10);
 
 // Next.js needs a resolvable hostname for internal requests — use localhost.
-// The TCP server binds to 0.0.0.0 so Railway's proxy can reach it.
+// The TCP server binds to 0.0.0.0 so the ALB can reach the container.
 const app = next({ dev, hostname: "localhost", port });
 const handle = app.getRequestHandler();
 
