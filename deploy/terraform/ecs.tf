@@ -222,3 +222,14 @@ output "migrate_task_definition_arn" {
 output "ecs_task_security_group_id" {
   value = aws_security_group.ecs.id
 }
+
+# Ready-to-use --network-configuration for `aws ecs run-task` (the migrate job).
+output "migrate_network_configuration" {
+  value = jsonencode({
+    awsvpcConfiguration = {
+      subnets        = aws_subnet.public[*].id
+      securityGroups = [aws_security_group.ecs.id]
+      assignPublicIp = "ENABLED"
+    }
+  })
+}
