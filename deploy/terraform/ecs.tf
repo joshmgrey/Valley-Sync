@@ -219,6 +219,11 @@ output "migrate_task_definition_arn" {
   value = aws_ecs_task_definition.migrate.arn
 }
 
+output "app_task_definition_arn" {
+  description = "Revision this apply produced — CI checks the service actually rolled onto it."
+  value       = aws_ecs_task_definition.app.arn
+}
+
 output "ecs_task_security_group_id" {
   value = aws_security_group.ecs.id
 }

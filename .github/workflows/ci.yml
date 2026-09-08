@@ -70,31 +70,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
+      # fmt + validate need no AWS credentials, so they always run — including on
+      # fork PRs and before the repo Variables/Secrets have been configured.
       - name: fmt
         run: terraform fmt -check -recursive
 
-      - name: init
-        run: terraform init -lock-timeout=120s
-
       - name: validate
-        run: terraform validate
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      # plan needs the S3 backend + AWS + the tfvars. Skip cleanly until the
+      # repo has AWS_ROLE_ARN set (fork PRs never will).
+      - name: Configure AWS credentials
+        if: vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: plan
-        run: terraform plan -lock-timeout=120s -no-color -out=tfplan | tee plan.txt
+        if: vars.AWS_ROLE_ARN != ''
+        run: |
+          terraform init -reconfigure -lock-timeout=120s
+          # Plan against whatever image the service is actually running, so the
+          # diff isn't polluted by a spurious image_tag change back to the
+          # "bootstrap" default. Falls back to that default before the first deploy.
+          IMAGE_TAG=bootstrap
+          if aws ecs describe-services --cluster valley-sync --services valley-sync \
+               --query 'services[0].status' --output text 2>/dev/null | grep -q ACTIVE; then
+            TD=$(aws ecs describe-services --cluster valley-sync --services valley-sync \
+              --query 'services[0].deployments[?status==`PRIMARY`]|[0].taskDefinition' --output text)
+            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" \
+              --query 'taskDefinition.containerDefinitions[0].image' --output text)
+            IMAGE_TAG=${IMAGE##*:}
+          fi
+          echo "plan image_tag=$IMAGE_TAG"
+          terraform plan -lock-timeout=120s -no-color -var="image_tag=$IMAGE_TAG" -out=tfplan | tee plan.txt
 
       - name: Comment plan on PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.AWS_ROLE_ARN != ''
         uses: actions/github-script@v7
         with:
           script: |
@@ -159,11 +179,19 @@ jobs:
       # 2. Build and push the image, tagged with the commit SHA. The public URL
       #    is baked in here (client bundle + edge middleware), so it must match
       #    what Terraform writes to SSM.
+      #
+      #    Tags are immutable — if this SHA is already in ECR (a re-run after a
+      #    later step failed), reuse it instead of failing on `docker push`.
       - name: Build and push image
         working-directory: .
         run: |
+          if aws ecr describe-images --repository-name valley-sync \
+               --image-ids imageTag="${GITHUB_SHA}" >/dev/null 2>&1; then
+            echo "${ECR_REPO}:${GITHUB_SHA} already present — reusing it."
+            exit 0
+          fi
           APP_URL="https://${{ vars.SUBDOMAIN }}.${{ vars.DOMAIN_NAME }}"
-          docker build \
+          docker build --platform linux/amd64 \
             --build-arg NEXT_PUBLIC_APP_URL="$APP_URL" \
             --build-arg DATABASE_URL="postgresql://build:build@localhost:5432/build" \
             -t "${ECR_REPO}:${GITHUB_SHA}" .
@@ -199,17 +227,27 @@ jobs:
           echo "migrate exit code: $EXIT_CODE"
           test "$EXIT_CODE" = "0"
 
-      # 5. Now block on the service rollout and fail if the circuit breaker
-      #    rolled it back.
+      # 5. Block on the service rollout. A circuit-breaker rollback also ends with
+      #    a PRIMARY / COMPLETED deployment, so COMPLETED alone isn't enough —
+      #    require that the PRIMARY deployment is actually running the task
+      #    definition this apply produced.
       - name: Wait for service rollout
         run: |
           CLUSTER="$(terraform output -raw ecs_cluster_name)"
           SERVICE="$(terraform output -raw ecs_service_name)"
+          EXPECTED="$(terraform output -raw app_task_definition_arn)"
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
-          STATE="$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
-            --query 'services[0].deployments[?status==`PRIMARY`].rolloutState' --output text)"
-          echo "rollout state: $STATE"
-          test "$STATE" = "COMPLETED"
+          PRIMARY="$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].deployments[?status==`PRIMARY`]|[0].{state:rolloutState,td:taskDefinition}' --output json)"
+          echo "$PRIMARY"
+          STATE="$(echo "$PRIMARY" | jq -r .state)"
+          RUNNING_TD="$(echo "$PRIMARY" | jq -r .td)"
+          if [ "$STATE" != "COMPLETED" ]; then
+            echo "::error::rollout state is $STATE"; exit 1
+          fi
+          if [ "$RUNNING_TD" != "$EXPECTED" ]; then
+            echo "::error::service rolled back — PRIMARY is $RUNNING_TD, expected $EXPECTED"; exit 1
+          fi
 
       - name: Summary
         run: echo "Deployed ${GITHUB_SHA} -> $(terraform output -raw app_url)" >> "$GITHUB_STEP_SUMMARY"
