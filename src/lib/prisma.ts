@@ -2,19 +2,22 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL!;
+  const url = new URL(process.env.DATABASE_URL!);
+  const sslmode = url.searchParams.get("sslmode");
+  const wantsSsl = sslmode !== null && sslmode !== "disable";
 
-  // RDS enforces TLS (rds.force_ssl). `pg` now treats `sslmode=require` in the
-  // URL as `verify-full`, and RDS's regional intermediate CA isn't in the base
-  // trust store, so the strict verify fails where Prisma's migrate engine (which
-  // uses lenient TLS) succeeds. Pass an explicit lenient TLS config for any
-  // sslmode other than `disable`; transport stays encrypted.
-  const wantsSsl =
-    /[?&]sslmode=/.test(connectionString) &&
-    !/[?&]sslmode=disable\b/.test(connectionString);
-
+  // Pass discrete params rather than `connectionString`: `pg` lets a connection
+  // string's `sslmode` override an explicit `ssl` option, and it now reads
+  // `sslmode=require` as `verify-full`, which rejects RDS's cert chain
+  // ("self-signed certificate in certificate chain"). Prisma's migrate engine
+  // uses lenient TLS, so migrations succeed but the app didn't. Transport stays
+  // encrypted; we just don't verify the chain.
   const adapter = new PrismaPg({
-    connectionString,
+    host: url.hostname,
+    port: url.port ? Number(url.port) : 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ""),
     ssl: wantsSsl ? { rejectUnauthorized: false } : undefined,
   });
   return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
