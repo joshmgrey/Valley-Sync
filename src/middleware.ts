@@ -40,8 +40,12 @@ export default auth((req) => {
   return NextResponse.next();
 });
 
+// This file must live in src/ (next to app/). Next.js silently ignores a
+// root-level middleware.ts in a src/ project; tests/unit/middleware.test.ts
+// guards against it moving back.
 export const config = {
   matcher: [
+    "/",
     "/boards/:path*",
     "/api/boards/:path*",
     "/api/tasks/:path*",

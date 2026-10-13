@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TaskService } from "@/lib/task/taskService";
 import { PrismaTaskRepository } from "@/lib/task/prismaTaskRepository";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { requireUser } from "@/lib/requireUser";
 import { rateLimit } from "@/lib/rateLimit";
 
 function getTaskService(): TaskService {
@@ -12,8 +12,9 @@ function getTaskService(): TaskService {
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "tasks:get");
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "tasks:get");
   if (limited) return limited;
 
   const { id } = await params;
@@ -27,8 +28,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "tasks:update", 60, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "tasks:update", 60, 60_000);
   if (limited) return limited;
 
   const { id } = await params;
@@ -44,8 +46,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "tasks:delete", 30, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "tasks:delete", 30, 60_000);
   if (limited) return limited;
 
   const { id } = await params;

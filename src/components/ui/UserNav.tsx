@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { signOut } from "next-auth/react";
 
 interface Props {
@@ -9,6 +10,24 @@ interface Props {
 }
 
 export function UserNav({ name, image }: Props) {
+  // GitHub sessions always carry an avatar, so no name and no image means signed out.
+  if (!name && !image) {
+    return (
+      <Link
+        href="/login"
+        style={{
+          padding: "6px 14px",
+          border: "1px solid #334155",
+          borderRadius: 6,
+          color: "#64748b",
+          fontSize: 13,
+        }}
+      >
+        Sign in
+      </Link>
+    );
+  }
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       {image && (

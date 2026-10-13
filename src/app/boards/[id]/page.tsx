@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BoardService } from "@/lib/board/boardService";
 import { PrismaBoardRepository } from "@/lib/board/prismaBoardRepository";
 import { prisma } from "@/lib/prisma";
@@ -11,6 +11,9 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function BoardPage({ params }: Props) {
   const { id } = await params;
+  const session = await auth();
+  if (!session) redirect(`/login?callbackUrl=${encodeURIComponent(`/boards/${id}`)}`);
+
   const service = new BoardService(new PrismaBoardRepository(prisma));
 
   let board;
@@ -19,8 +22,6 @@ export default async function BoardPage({ params }: Props) {
   } catch {
     notFound();
   }
-
-  const session = await auth();
 
   return (
     <BoardView

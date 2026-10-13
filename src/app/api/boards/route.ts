@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { BoardService } from "@/lib/board/boardService";
 import { PrismaBoardRepository } from "@/lib/board/prismaBoardRepository";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { requireUser } from "@/lib/requireUser";
 import { rateLimit } from "@/lib/rateLimit";
 
 function getBoardService(): BoardService {
@@ -10,8 +10,9 @@ function getBoardService(): BoardService {
 }
 
 export async function GET() {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "boards:list");
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "boards:list");
   if (limited) return limited;
 
   try {
@@ -24,13 +25,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "boards:create", 20, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "boards:create", 20, 60_000);
   if (limited) return limited;
 
   try {
     const { name } = await request.json();
-    const board = await getBoardService().createBoard(name, session!.user.id);
+    const board = await getBoardService().createBoard(name, user.userId);
     return NextResponse.json({ board }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
