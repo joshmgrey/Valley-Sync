@@ -3,15 +3,21 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+// The public origin, inlined at build time. Don't build URLs from req.url:
+// server.ts starts Next with hostname "localhost", so req.url is
+// http://localhost:3000/... even behind the ALB.
+function appOrigin(): string {
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
+
 function csrfCheck(req: NextRequest): boolean {
   if (SAFE_METHODS.has(req.method.toUpperCase())) return true;
 
   const origin = req.headers.get("origin");
   if (!origin) return false;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   try {
-    return new URL(origin).origin === new URL(appUrl).origin;
+    return new URL(origin).origin === new URL(appOrigin()).origin;
   } catch {
     return false;
   }
@@ -32,8 +38,8 @@ export default auth((req) => {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", req.url);
+    const loginUrl = new URL("/login", appOrigin());
+    loginUrl.searchParams.set("callbackUrl", `${pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 
