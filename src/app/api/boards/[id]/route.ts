@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { BoardService } from "@/lib/board/boardService";
 import { PrismaBoardRepository } from "@/lib/board/prismaBoardRepository";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { requireUser } from "@/lib/requireUser";
 import { rateLimit } from "@/lib/rateLimit";
 
 function getBoardService(): BoardService {
@@ -12,8 +12,9 @@ function getBoardService(): BoardService {
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "boards:get");
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "boards:get");
   if (limited) return limited;
 
   const { id } = await params;
@@ -27,14 +28,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "boards:update", 30, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "boards:update", 30, 60_000);
   if (limited) return limited;
 
   const { id } = await params;
   try {
     const { name } = await req.json();
-    const board = await getBoardService().renameBoard(id, name, session!.user.id);
+    const board = await getBoardService().renameBoard(id, name, user.userId);
     return NextResponse.json({ board });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -44,13 +46,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "boards:delete", 10, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "boards:delete", 10, 60_000);
   if (limited) return limited;
 
   const { id } = await params;
   try {
-    await getBoardService().deleteBoard(id, session!.user.id);
+    await getBoardService().deleteBoard(id, user.userId);
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

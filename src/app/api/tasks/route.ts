@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TaskService } from "@/lib/task/taskService";
 import { PrismaTaskRepository } from "@/lib/task/prismaTaskRepository";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/auth";
+import { requireUser } from "@/lib/requireUser";
 import { rateLimit } from "@/lib/rateLimit";
 
 function getTaskService(): TaskService {
@@ -10,8 +10,9 @@ function getTaskService(): TaskService {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "tasks:list");
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "tasks:list");
   if (limited) return limited;
 
   const boardId = request.nextUrl.searchParams.get("boardId");
@@ -27,8 +28,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  const limited = rateLimit(session!.user.id, "tasks:create", 30, 60_000);
+  const user = await requireUser();
+  if ("response" in user) return user.response;
+  const limited = rateLimit(user.userId, "tasks:create", 30, 60_000);
   if (limited) return limited;
 
   try {

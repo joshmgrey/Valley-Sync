@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BoardService } from "@/lib/board/boardService";
 import { PrismaBoardRepository } from "@/lib/board/prismaBoardRepository";
 import { prisma } from "@/lib/prisma";
@@ -14,7 +15,9 @@ async function getBoards() {
 }
 
 export default async function HomePage() {
-  const [boards, session] = await Promise.all([getBoards(), auth()]);
+  const session = await auth();
+  if (!session) redirect("/login");
+  const boards = await getBoards();
 
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", padding: "48px 24px" }}>
