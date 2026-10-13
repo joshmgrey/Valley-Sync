@@ -15,9 +15,13 @@ resource "aws_db_parameter_group" "main" {
   family = "postgres${var.db_engine_version}"
 
   parameter {
-    name         = "rds.force_ssl"
-    value        = "1"
-    apply_method = "immediate" # rds.force_ssl is a dynamic parameter
+    name  = "rds.force_ssl"
+    value = "1"
+    # Match what AWS reports back. rds.force_ssl is dynamic, but RDS records
+    # this parameter as pending-reboot and ignores an apply_method-only change
+    # (same value), so "immediate" diffed on every plan. The value is what
+    # matters, and 1 is also the PostgreSQL 15+ default, so it is in effect.
+    apply_method = "pending-reboot"
   }
 }
 
