@@ -1,6 +1,8 @@
 # Valley Sync
 
-Valley Sync is a real-time collaborative task board where multiple users can create boards, add tasks, and move them across columns — with every change broadcast instantly to all connected clients over WebSockets. Built to demonstrate a production-grade TypeScript architecture: business logic decoupled from the framework behind repository interfaces, end-to-end type-safe Socket.io events, GitHub OAuth via Auth.js, multiple layers of security hardening, and a CI/CD pipeline that runs tests and deploys to AWS on every push to main.
+[![CI](https://github.com/joshmgrey/Valley-Sync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/joshmgrey/Valley-Sync/actions/workflows/ci.yml)
+
+Valley Sync is a real-time collaborative task board where multiple users can create boards, add tasks, and move them across columns — with every change broadcast instantly to all connected clients over WebSockets. Built to demonstrate a production-grade TypeScript architecture: business logic decoupled from the framework behind repository interfaces, end-to-end type-safe Socket.io events, GitHub OAuth via Auth.js, multiple layers of security hardening, and a CI/CD pipeline that runs tests on every PR and push to main, and deploys to AWS whenever a push to main changes the app or infrastructure.
 
 ## Tech Stack
 
@@ -17,6 +19,42 @@ Valley Sync is a real-time collaborative task board where multiple users can cre
 ## Architecture
 
 Business logic lives in `src/lib/` behind repository interfaces, completely decoupled from Next.js. API routes and the Socket.io server are thin layers that call into those services — the same `TaskService` handles both REST and WebSocket mutations.
+
+```mermaid
+flowchart LR
+    Browser["Browser<br/>React + Zustand"]
+
+    subgraph AWS["AWS (Terraform)"]
+        ALB["ALB<br/>HTTPS + WebSocket upgrade"]
+        subgraph Task["ECS Fargate task — server.ts (single Node process)"]
+            MW["middleware.ts<br/>auth + Origin/CSRF check"]
+            Routes["Next.js API routes<br/>rate-limited"]
+            IO["Socket.io server<br/>JWT handshake + Zod schemas"]
+            Services["BoardService / TaskService<br/>(src/lib, framework-free)"]
+            Repos["Prisma repositories"]
+        end
+        RDS[("RDS PostgreSQL<br/>private subnets")]
+        SSM["SSM Parameter Store<br/>secrets"]
+        ECR["ECR<br/>images"]
+    end
+
+    GitHub["GitHub OAuth<br/>(Auth.js)"]
+    CI["GitHub Actions<br/>OIDC → AWS"]
+
+    Browser -- "HTTP" --> ALB
+    Browser <-. "WebSocket" .-> ALB
+    ALB --> MW --> Routes --> Services
+    ALB <-.-> IO --> Services
+    Services --> Repos --> RDS
+    IO -. "broadcast to board room" .-> Browser
+    Browser -- "sign in" --> GitHub
+    SSM -. "env at task start" .-> Task
+    CI -- "push image" --> ECR
+    CI -- "terraform apply + migrate task" --> Task
+    ECR -. "pull" .-> Task
+```
+
+A task mutation from one client goes `Socket.io → Zod validation → TaskService → Prisma → Postgres`, then the server emits the result to every socket in that board's room. REST mutations hit the same `TaskService`.
 
 ```
 src/
@@ -64,8 +102,8 @@ Valley Sync implements several layers of protection:
 
 **1. Clone and install**
 ```bash
-git clone https://github.com/your-username/valley-sync.git
-cd valley-sync
+git clone https://github.com/joshmgrey/Valley-Sync.git
+cd Valley-Sync
 npm install
 ```
 
@@ -74,13 +112,18 @@ npm install
 cp .env.example .env
 ```
 
-Fill in `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`, and generate `AUTH_SECRET` (see below).
+In `.env`:
+
+- `DATABASE_URL` already matches the Postgres container in `docker-compose.yml`
+  (`valley:valley@localhost:5432/valley_sync`) — leave it unless you changed that file.
+- Fill in `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` (see [GitHub OAuth Setup](#github-oauth-setup)).
+- Generate `AUTH_SECRET` (next step).
 
 **3. Generate AUTH_SECRET**
 ```bash
-openssl rand -base64 32
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
-Paste the output into `AUTH_SECRET` in `.env`.
+Paste the output into `AUTH_SECRET` in `.env`. (Works in any shell; `openssl rand -base64 32` is equivalent on macOS/Linux.)
 
 **4. Start the database**
 ```bash
@@ -125,6 +168,22 @@ at 90% (branches/functions/lines/statements) **for those files only**; route
 handlers, React components, and the Prisma repositories are thin adapters and
 are not part of the coverage gate.
 
+**Current results** (`npm test -- --coverage`):
+
+| Suite | Covers |
+|---|---|
+| `tests/unit/lib/boardService.test.ts` | `BoardService` — validation, ownership checks |
+| `tests/unit/lib/taskService.test.ts` | `TaskService` — create/update/delete, field limits |
+| `tests/unit/lib/eventSchemas.test.ts` | Socket.io Zod payload schemas |
+
+3 suites, **44 tests, all passing**. Coverage on the gated files:
+
+| File | Statements | Branches | Functions | Lines |
+|---|---|---|---|---|
+| `src/lib/board/boardService.ts` | 100% | 100% | 100% | 100% |
+| `src/lib/task/taskService.ts` | 100% | 100% | 100% | 100% |
+| `src/lib/socket/eventSchemas.ts` | 100% | 100% | 100% | 100% |
+
 ## Deployment
 
 Infrastructure is Terraform-managed on AWS: ECS Fargate (one task) behind an
@@ -133,14 +192,19 @@ private subnets, image in ECR, secrets in SSM Parameter Store. Full layout,
 one-time bootstrap, cost, and teardown are in
 [`deploy/terraform/README.md`](deploy/terraform/README.md).
 
-**Pipeline** (`.github/workflows/ci.yml`) — on every push to `main`, once `test`
-and `lint` pass, the `deploy` job authenticates to AWS via GitHub OIDC and:
+**Pipeline** (`.github/workflows/ci.yml`) — `test` and `lint` run on every PR and
+push to `main`. On a push to `main` that touches deployable paths (`src/`, `server.ts`,
+`prisma/`, configs, `package*.json`, `Dockerfile`, `deploy/terraform/`, or the
+workflow itself), once they pass, the `deploy` job authenticates to AWS via
+GitHub OIDC and:
 
 1. builds the Docker image and pushes it to ECR tagged with the commit SHA
 2. runs `terraform apply` (infrastructure + task definitions)
 3. runs `prisma migrate deploy` as a one-off ECS task and requires it to exit 0
 4. waits for the ECS service to roll onto the new image and reports failure if
    the deployment circuit breaker rolls it back
+
+Pushes that only change docs or tests skip the `deploy` job.
 
 **Required GitHub repo configuration:**
 

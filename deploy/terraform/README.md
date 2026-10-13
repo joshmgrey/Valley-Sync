@@ -4,6 +4,36 @@ Terraform for the whole stack: ECS Fargate (one task) behind an ALB with HTTPS
 and WebSocket support, RDS PostgreSQL in private subnets, image in ECR, secrets
 in SSM Parameter Store, DNS + TLS via Route53 + ACM.
 
+```mermaid
+flowchart TB
+    User["Browser"] -- "HTTPS" --> R53["Route53 alias"]
+    R53 --> ALB
+
+    subgraph VPC["VPC (2 AZs, no NAT gateway)"]
+        subgraph Public["Public subnets — route to IGW"]
+            ALB["ALB<br/>:80 → :443 redirect<br/>:443 HTTPS (ACM cert)<br/>idle_timeout 3600"]
+            ECS["ECS Fargate — 1 task<br/>Next.js + Socket.io<br/>public IP, SG: ALB-only ingress"]
+            MIG["Migrate task (one-off)<br/>prisma migrate deploy"]
+        end
+        subgraph Private["Private subnets — no route off the VPC"]
+            RDS[("RDS PostgreSQL<br/>db.t4g.micro, single-AZ<br/>SG: task SG only")]
+        end
+    end
+
+    ALB -- "target group, health check /healthz" --> ECS
+    ECS --> RDS
+    MIG --> RDS
+    SSM["SSM Parameter Store<br/>AUTH_*, DATABASE_URL, app URL"] -. "secrets at task start" .-> ECS
+    ECR["ECR"] -. "image pull" .-> ECS
+
+    subgraph CI["GitHub Actions (OIDC → valley-sync-github-actions role)"]
+        Build["docker build + push :sha"] --> Apply["terraform apply"] --> Run["run migrate task"] --> Wait["wait services-stable"]
+    end
+    Build --> ECR
+    Run --> MIG
+    State[("S3 state + DynamoDB lock<br/>(created by bootstrap/)")] -.- Apply
+```
+
 ## Layout
 
 | File | Contents |
