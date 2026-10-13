@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/joshmgrey/Valley-Sync/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/joshmgrey/Valley-Sync/actions/workflows/ci.yml)
 
+**Live:** https://app.valley-sync.org
+
 Valley Sync is a real-time collaborative task board where multiple users can create boards, add tasks, and move them across columns — with every change broadcast instantly to all connected clients over WebSockets. Built to demonstrate a production-grade TypeScript architecture: business logic decoupled from the framework behind repository interfaces, end-to-end type-safe Socket.io events, GitHub OAuth via Auth.js, multiple layers of security hardening, and a CI/CD pipeline that runs tests on every PR and push to main, and deploys to AWS whenever a push to main changes the app or infrastructure.
 
 ## Tech Stack
