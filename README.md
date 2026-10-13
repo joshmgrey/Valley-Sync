@@ -194,7 +194,7 @@ one-time bootstrap, cost, and teardown are in
 
 **Pipeline** (`.github/workflows/ci.yml`) — `test` and `lint` run on every PR and
 push to `main`. On a push to `main` that touches deployable paths (`src/`, `server.ts`,
-`prisma/`, configs, `package*.json`, `Dockerfile`, `deploy/terraform/`, or the
+`prisma/`, configs, `package*.json`, `Dockerfile`, `deploy/terraform/*.tf`, or the
 workflow itself), once they pass, the `deploy` job authenticates to AWS via
 GitHub OIDC and:
 

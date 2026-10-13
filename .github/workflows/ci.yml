@@ -42,7 +42,11 @@ jobs:
               - 'package-lock.json'
               - 'Dockerfile'
               - '.dockerignore'
-              - 'deploy/terraform/**'
+              # Only what CI applies: the root module's config + provider lock.
+              # Not its README or tfvars.example, and not bootstrap/ (applied
+              # by hand). Add new paths here if the module grows subdirectories.
+              - 'deploy/terraform/*.tf'
+              - 'deploy/terraform/.terraform.lock.hcl'
               - '.github/workflows/ci.yml'
 
   test:
